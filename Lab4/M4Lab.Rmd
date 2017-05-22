@@ -1,0 +1,233 @@
+---
+title: "Module 4 Lab"
+output: pdf_document
+---
+
+This lab covers a number of topics, and is divided into two sections. The first section uses a baseball dataset to proceed through the steps associated with fitting a multiple linear regression (MLR) model. These steps include exploratory data analysis, fitting the model, assessing the validity of the regression assumptions, and calculating case influence statistics. The second section is a simulation study that examines the impact of multicollinearity in the explanatory variables in a MLR model.
+
+# Section 1 - Major League Baseball Data
+
+## The Data and Initial Plots
+
+The dataset we will use is a ficticious random sample of 28 Major League Baseball (MLB) teams season statistics. Each observation is one season for one team, and the variables are team totals in four offensive categories. The dataset `MLB.csv` is in the Module 4 Lab folder. Go ahead and load it in.
+
+```{r, warning=FALSE}
+MLB <- read.csv("MLB.csv")
+head(MLB)
+```
+
+Our question of interest is: what is the relationship between the response variable runs (`R`), and the explanatory variables home run (`HR`), base on balls (`BB`),	and strikeout (`SO`). A good place to start is scatter plots of runs against each of the three individual predictors. Use this code to take a look at the plots.
+
+```{r, eval=FALSE}
+qplot(HR, R, data = MLB)
+qplot(BB, R, data = MLB)
+qplot(SO, R, data = MLB)
+```
+
+
+The relationships between (1) runs and home runs, and (2) runs and base on balls, looks positive and linear, with no noteworthy outliers. The relationship between runs and strikeouts also looks approximately linear, but negative, and also with no outliers.
+
+Without further ado, let's go ahead and fit a model.
+
+## Multiple Linear Regression
+
+The R code for multiple linear regression (MLR) is very similar to the R code for simple linear regression (SLR). We again use `lm()`, but we need to be sure to specify each explanatory variable we want to include in the model. The model we are fitting is: 
+
+$$Runs = \beta_{0} + \beta_{1}*HR + \beta_{2}* BB + \beta_{2}*SO + \epsilon_{i}, $$
+
+where $\epsilon_{i} \stackrel{iid}{\sim} N(0, \sigma^{2})$.
+      
+```{r}
+fit <- lm(R ~ HR + BB + SO, data = MLB)
+```
+
+Looking at the output, we see that all three explanatory variables are significant, with p-values less than 0.01. The next step is assessing the validity of the model assumptions.
+
+## Residual Diagnostics
+
+One way to evaluate the validity of our assumptions is by looking at residual plots. With more explanatory variables, we have more residual plots to look at.
+
+```{r, eval=FALSE}
+qplot(HR, residuals(fit), data = MLB) + geom_hline(aes(yintercept=0))
+qplot(BB, residuals(fit), data = MLB) + geom_hline(aes(yintercept=0))
+qplot(SO, residuals(fit), data = MLB) + geom_hline(aes(yintercept=0))
+
+qplot(fitted(fit), residuals(fit), data = fit) + geom_hline(aes(yintercept=0)) 
+```
+
+The residuals versus explanatory variable plots give no indication of non-linearity. The residuals versus fitted values plot also does not raise any red flags: no dramatic indication of non-normality, non-constant variance, or non-independence.
+
+## Case-Influence Statistics
+
+In general, one of the concerns with outliers is that an invalid observation could inappropriately have a large impact on inference. In the case of suspicious outliers, we would want to know the effect of the observation on the MLR, and case influence statistics help analyze that effect. We look at two case influence statistics here--- leverage and Cook's distance.
+
+### Leverage
+
+One category of influential observations, in terms of the $\beta$ parameter estimates, are those far from the "center" of the explanatory variables. Such a point is said to have "high leverage," which can be quantified with the corresponding diagonal element of something called the hat matrix. The function `influence()` calculates, among other statistics, the diagonal elements of the hat matrix.
+
+```{r, warning=FALSE, eval=FALSE}
+CIS <- data.frame(influence(fit))
+names(CIS) # Notice the element "hat"
+qplot(1:28, hat, data = CIS) 
+MLB[CIS$hat > 0.2,]
+MLB[CIS$hat > 0.3,]
+```
+
+Assessing the plot visually, four observations stand out as having greater (two much greater) leverage than the rest. The last two lines of code identify the high leverage observations. If we had noticed outliers in our initial plots of the explanatory variables against the response, then we would want to know if the outliers had high leverage. 
+
+### Cook's Distance
+
+The "Cook's D" statistic measures the overall impact of an observation on the $\hat{\beta}$ values. In other words, an observation's Cook's D will be large if its removal would result in a large change in the $\beta$ estimates.
+
+```{r, eval = FALSE}
+Cook <- cooks.distance(fit)
+qplot(1:28, Cook) 
+MLB[Cook > 0.6,]
+```
+
+Notice that observation 10 is among the most influential observations in terms of $\beta$ estimates (Cook's Distance), and in terms of leverage. If observation ten had been an outlier, then it would be up to the researcher to decide if observation ten is valid. It is very important to note--an observation **should not be removed** simply because it is influential.
+
+# Section Two - Multicollinearity
+
+When the explanatory variables are correlated, it inflates the estimation variance of the $\beta$ parameters. This section demonstrates this fact through simulations. 
+
+## Simulation Study
+
+First, define the following model:
+
+$$ Y_{i} = 0.5 + 0.3 X_{1i} + 0.7 X_{2i} + \epsilon_{i}, $$
+
+where $\epsilon_{i} \stackrel{iid}{\sim} N(0, \sigma^{2})$. The choice of coefficients (0.5, 0.3, 0.7) was arbitrary; we just need a model to work with. Now, consider two scenarios:  
+\begin{itemize}
+\item $X_{1i}$ and $X_{2i}$ are uncorrelated---the scenario we are used to.
+\end{itemize}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height= 4, fig.width = 4}
+library(MASS)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+mu1 <- matrix(c(0,0)) 
+sigma1 <- matrix(c(1, 0, 0, 1), ncol = 2)
+X1 <- mvrnorm(n = 250, mu = mu1, Sigma = sigma1)
+p <- qplot(V1, V2, data = as.data.frame(X1)) + xlab(expression(X[1])) + ylab(expression(X[2]))
+ggExtra::ggMarginal(p, type = "histogram")
+```
+Notice that the individual histograms for $X_{1}$ and $X_{2}$ are very similar, reflecting the fact that, when considered separately, they have identical distributions to one another.
+
+\begin{itemize}
+\item $X_{1i}$ and $X_{2i}$ are highly correlated---multicollinear, the scenario we are learning about!
+\end{itemize}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height= 4, fig.width = 4}
+mu1 <- matrix(c(0,0)) 
+sigma2 <- matrix(c(1, 0.9, 0.9, 1), ncol = 2)
+X2 <- mvrnorm(n = 250, mu = mu1, Sigma = sigma2)
+p2 <- qplot(V1, V2, data = as.data.frame(X2)) + xlab(expression(X[1])) + ylab(expression(X[2]))
+ggExtra::ggMarginal(p2, type = "histogram")
+```
+
+
+Notice the histograms in the margins again look very similar. In fact, despite begin correlated, when considered separately each distribution is N(0,1).  
+
+The issue of interest here is: what happens to the variance of the estimates of $\beta_{0}$, $\beta_{1}$, and $\beta_{2}$ when $X_{1}$ and $X_{2}$ are correlated? In other words, is it harder to estimate the $\beta$ coefficients when $X_{1}$ and $X_{2}$ are correlated? Let's run a simulation to find out. Here are the steps.
+
+\begin{enumerate}
+\item Define $\beta_{0} = 0.5$, $\beta_{1} = 0.3$, and $\beta_{2} = 0.7$
+\item Define the mean of $X_{1}$ and $X_{2}$
+\item Generate correlated/uncorrelated $X_{1}$ and $X_{2}$ data
+\item Generate the response variable; use model equation and add N(0,1) noise
+\item Fit a MLR model
+\item Extract the coefficient estimate; $\hat{\beta}_{0}$, $\hat{\beta}_{1}$, or $\hat{\beta}_{2}$
+\item Repeat steps (3) through (6) many times.
+\end{enumerate}
+
+Let's start by writing a function that will accomplish steps (3) through (6).
+
+```{r}
+fitmodel <- function(beta, cov){ # Beta = 1, 2, 3 - specify coefficient
+  X <- mvrnorm(n = 75, mu = mu, Sigma = cov) # Generate uncorrelated/correlated data
+  X1 <- X[,1] # First column of X
+  X2 <- X[,2] # Second column of X
+  Y <- beta0 + beta1*X1 + beta2*X2 + rnorm(75, 0, 1) # Generate/calculate response 
+  fit <- lm(Y ~ X1 + X2) # Fit the model
+  fit$coefficients[beta] # Return specified coef - "beta" argument
+}
+```
+
+Our function will take two arguments: the $\beta$ coefficient (1 = $\beta_{0}$, 2 = $\beta_{1}$, or 3 = $\beta_{2}$) we want to estimate, and a covariance matrix. The second line generates bivariate Normal data, using the specified covariance matrix. I chose n = 75 to provide enough length in each set of observations to create reasonable estimates. The third line creates the response variable by calculating $Y_{i} = 0.5 + 0.3 X_{1i} + 0.7 X_{2i}$, and then adding a randomly generated N(0,1) number to it. The fourth line fits a MLR model, and the fifth line extracts $\hat{\beta}_{0}$, $\hat{\beta}_{1}$, or $\hat{\beta}_{2}$ from the model, depending on whether 1, 2, or 3 was specified in the `fitmodel(beta = ?, cov)` function call.
+
+Let's try it for $\beta_{0}$ in the uncorrelated explanatory variables scenario. Remember, we need to complete steps (1), (2), and (7) with the function we just created.
+
+```{r, message=FALSE, fig.height= 4}
+# Step 1
+beta0 <- 0.5 # define beta_0
+beta1 <- 0.3 # define beta_1, 
+beta2 <- 0.7 # define beta_2
+
+# Step 2
+mu <- matrix(c(0,0)) # Set means for X_1, X_2
+sigma1 <- matrix(c(1, 0, 0, 1), ncol = 2) # Cov Matrix: Cov(X_1, X_2) = 0
+
+# Step 7
+set.seed(1822) # Francis Galton born, invented regression concept
+beta0_estimates <- replicate(1000, fitmodel(1, sigma1)) # 1st coef --> beta_0
+sd(beta0_estimates)
+
+# Display results
+qplot(beta0_estimates) + ylab("") + 
+  theme(axis.ticks = element_blank(), axis.text.y = element_blank()) + 
+  xlab(expression(beta[0]))
+```
+
+Notice that the covariance matrix we specified in "Step 2" gives independent N(0,1) random variables for $X_{1}$ and $X_{2}$. The function `sd()` gives the standard error of our estimates, about 0.11. We see in the histogram that our estimates are clustered around 0.5, the true value of $\beta_{0}$.
+
+Now it is your turn to do the same thing for $\beta_{1}$ and $\beta_{2}$ in the uncorrelated case; and $\beta_{0}$, $\beta_{1}$, and $\beta_{2}$ in the correlated case. As you run the simulations, fill in the standard errors in the table below. Note: In the correlated case, use `sigma2 <- matrix(c(1, 0.9, 0.9, 1), ncol = 2)` to define the covariance matrix.  
+
+\begin{center}
+  \begin{tabular}{ | c |  r |} \hline
+    Parameter & $SE(\hat{\beta}_{i})$ \\ \hline \hline
+    {\bf Uncorrelated} & \\ \hline
+    $\beta_{0}$ & 0.11 \\ \hline
+    $\beta_{1}$ &  \\ \hline
+    $\beta_{2}$ &  \\ \hline
+    {\bf Correlated} & \\ \hline
+    $\beta_{0}$ &  \\ \hline
+    $\beta_{1}$ &  \\ \hline
+    $\beta_{2}$ &  \\ \hline
+  \end{tabular}
+\end{center}
+
+If you plot the results, you should see something similar to my results below.
+
+```{r, message=FALSE, echo=FALSE}
+
+# Uncorrelated
+beta0_estimates <- replicate(1000, fitmodel(1, sigma1)) 
+beta1_estimates <- replicate(1000, fitmodel(2, sigma1))
+beta2_estimates <- replicate(1000, fitmodel(3, sigma1))
+
+# Correlated
+sigma2 <- matrix(c(1, 0.9, 0.9, 1), ncol = 2)
+corr_beta0_estimates <- replicate(1000, fitmodel(1, sigma2)) 
+corr_beta1_estimates<- replicate(1000, fitmodel(2, sigma2))
+corr_beta2_estimates <- replicate(1000, fitmodel(3, sigma2))
+
+results <- matrix(cbind(
+  beta0_estimates, beta1_estimates, beta2_estimates,
+  corr_beta0_estimates, corr_beta1_estimates, corr_beta2_estimates), 
+                  ncol = 6)
+
+colnames(results) <- paste("hat(beta)[", rep(0:2, 2), "]:", rep(c("Uncorrelated", "Correlated"), each = 3), sep = "")
+ 
+library(reshape)
+results <- melt(results)
+colnames(results) <- c("index", "Param", "Estimate")
+results$beta <- sapply(strsplit(as.character(results$Param), ":"), "[[", i = 1)
+results$data <- factor(sapply(strsplit(as.character(results$Param), ":"), "[[", i = 2), levels = c("Uncorrelated", "Correlated"))
+
+qplot(Estimate, data = results) + 
+  facet_grid(data ~ beta, labeller = label_parsed) + 
+  ylab("") + 
+  theme(axis.ticks = element_blank(), axis.text.y = element_blank()) 
+```
+
+The variances of $\hat{\beta}_{1}$ and $\hat{\beta}_{2}$ are much larger when they are correlated than when they are uncorrelated. Does it make sense that $\hat{\beta}_{0}$ is unaffected?

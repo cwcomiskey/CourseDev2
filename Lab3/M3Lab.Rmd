@@ -1,0 +1,99 @@
+---
+title: "Module 3 Lab"
+output: pdf_document
+---
+
+This lab guides you through the mechanics of simple linear regression. This includes fitting the model, exploring the returned fit, and obtaining confidence and prediction intervals. We use husband and wife data from *OpenIntro Statistics*, provided for you in the Module 3 Lab folder.
+
+# Simple Linear Regression
+
+Load in the data and take a look at the first few rows.
+
+```{r}
+HWData <- read.csv("Age.csv", row.name = 1) # Husband and Wife Data
+head(HWData)
+```
+
+The dataset has columns for the husband and wife age and height. Let's try to use the husband's age to predict his wife's age. We start with a scatterplot of the data.
+
+```{r, warning=FALSE, fig.height= 4}
+library(ggplot2)
+qplot(HAge, WAge, data = HWData)
+```
+
+The explanatory variable `HAge` is on the x-axis, and the response variable `WAge` is on the y-axis; this arrangement is customary. Also notice that `qplot()` removed the rows with missing data before plotting, which is helpful. 
+
+As far as the relationship between spousal ages, what do we see? There is a strong, positive linear correlation between a husband's age and his wife's age. Without further ado, let's fit a simple linear regression model.
+
+```{r}
+fit <- lm(WAge ~ HAge, data = HWData) # Regress Wife Age against Husband Age
+```
+
+The function `lm()`, which stands for "linear model", regresses `WAage` on `HAge`. Notice that the structure for this formula in `lm()` is `response ~ explanatory`. We stored the model fit as `fit`, and you will notice there is no output. To get `lm()` to share, we need another line of code.
+
+```{r}
+summary(fit) 
+```
+
+Starting at the top, we see the model that was fit inside `lm()`, followed by a five number summary for the residuals. Next the coefficient estimates are given in tabular form, along with their standard error, t-statistic, and associated p-value. Recall the model we fit,  
+$$ \textit{WAge}_{i} = \beta_{0} + \beta_{1} \textit{HAge}_{i} + \epsilon_{i}, $$
+where it is assumed that $\epsilon_{i} \stackrel{iid}{\sim} N(0, \sigma^{2})$.
+The R output above gives us $\hat{\beta}_{0}$ = 1.57, and $\hat{\beta}_{1} = 0.91$. Next is the residual standard error $\hat{\sigma} = 3.96$. This is the estimate of the standard deviation of the $\epsilon_{i}$'s. In the same line, the output gives the degrees of freedom on which the estimate was based. The penultimate line of the R output gives two versions of $R^{2}$, which is described as the percent of variation explained by the model. The final line gives the F-statistic and p-value for the overall significance of the regression model, comparing the model we fit to a model that only includes the intercept. 
+
+We can replot our points, but this time with the regression line overlaid.
+
+```{r, warning=FALSE}
+qplot(HAge, WAge, data = HWData) + geom_smooth(method = "lm")
+```
+
+You will notice the shaded bands around the regression line, which denote 95\% confidence intervals for the mean wife age at each husband age. Later in this lab we learn how to calculate confidence intervals.
+
+# Residuals
+
+The stored regression object `fit` is actually a list with 13 elements. On a side note, `summary(fit)` is also a list, with 12 elements!
+
+```{r}
+names(fit) # Show all 13 elements
+```
+
+We can use the residuals to evaluate the validity of the model we fit, with regard to the model assumptions. If there is a reason to doubt the assumptions, it often reveals itself in non-random structure in a plot of residuals versus fitted values, or residuals versus explanatory variable values.
+
+```{r, warning=FALSE}
+qplot(HAge, .resid, data = fit) + xlim(18, 61) 
+qplot(.fitted, .resid, data = fit) + xlim(18, 61)
+```
+
+Neither plot shows any systematic change in the variance across husband ages. More generally, there is no observable pattern or trend of any kind in the residuals. These plots do not raise any red flags, so we proceed to confidence and prediction intervals.
+
+# Prediction and Confidence Intervals
+
+We may want confidence intervals for the estimated parameters. The function `confint()` will return these.
+
+```{r}
+confint(fit)
+```
+
+The output is self-explanatory. The default is a 95\% confidence interval, but there is a `level = ?` argument to specify different confidence levels.
+
+A second useful function is `predict()`, which calculates confidence and prediction intervals for specified values of the explanatory variable. For example, this code will produce point estimates and confidence intervals for the mean at all explanatory variable values in the original dataset.
+
+```{r, eval = FALSE}
+predict(fit, interval = "confidence")
+```
+
+What are the estimated mean wife ages for 30, 35, and 40-year-old husbands?
+
+```{r, eval = FALSE}
+new <- data.frame(HAge = c(30, 35, 40))
+predict(fit, newdata = new, interval = "confidence")
+```
+
+On the other hand, what if we want to predict the wife age of one randomly selected husband for each of those ages?
+
+```{r, eval = FALSE}
+predict(fit, newdata = new, interval = "prediction")
+```
+
+Notice that in the first column the point estimates are the same. The prediction intervals, however, are much wider than the confidence intervals, as you can see in columns two and three.
+
+
